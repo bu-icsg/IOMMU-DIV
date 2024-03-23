@@ -41,7 +41,18 @@ Once the compilation is successful, you should see the kernel image at ```linux/
 
 #### Compiling QEMU:
 ```
-
+./configure --enable-trace-backends=log --prefix=$PWD/build
+make -j`nproc` install
+export PATH=$PWD/build/bin:$PATH
+cd -
 ```
+
+#### Running QEMU:
+Since we are using kvm to run QEMU, we first need to set kvm access permission.
+```
+sudo usermod -a -G kvm $USER
+```
+We need to log out and log in again for this permission change to take effect. After logging back in, execute the run.sh script to run QEMU. 
+
 
 ## Enabling the Mitigation
