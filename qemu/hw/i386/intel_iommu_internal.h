@@ -94,6 +94,10 @@
 #define DMAR_IOTLB_REG          (DMAR_IOTLB_REG_OFFSET + 0x8)
 #define DMAR_IOTLB_REG_HI       (DMAR_IOTLB_REG + 4)
 
+#ifdef HW_INV_MODE
+#define DMAR_HW_INV_REG     0x110
+#endif
+
 /* FRCD */
 #define DMAR_FRCD_REG_OFFSET    0x220 /* Offset to the fault recording regs */
 /* NOTICE: If you change the DMAR_FRCD_REG_NR, please remember to change the

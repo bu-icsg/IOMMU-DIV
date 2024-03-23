@@ -39,6 +39,8 @@
 #include "kvm/kvm_i386.h"
 #include "migration/vmstate.h"
 #include "trace.h"
+#include "qemu/log.h"
+
 
 /* context entry operations */
 #define VTD_CE_GET_RID2PASID(ce) \
@@ -311,6 +313,32 @@ out:
     return entry;
 }
 
+#ifdef HW_INV_MODE
+/* Must be called with IOMMU lock held */
+static void vtd_iotlb_reset_valid(IntelIOMMUState *s, 
+				  hwaddr addr, 
+				  uint16_t source_id)
+{
+    VTDIOTLBEntry *entry ;
+    VTDIOTLBEntry *newentry = g_malloc(sizeof(*entry));
+    uint64_t *newkey = g_malloc(sizeof(*newkey));
+    uint64_t key;
+    int level;
+
+    for (level = VTD_SL_PT_LEVEL; level < VTD_SL_PML4_LEVEL; level++) {
+        key = vtd_get_iotlb_key(vtd_get_iotlb_gfn(addr, level), source_id, level);
+        entry = g_hash_table_lookup(s->iotlb, &key);
+        if (entry) {
+            *newentry = *entry;
+            newentry->mapped = 0;
+            *newkey = key;
+            g_hash_table_replace(s->iotlb, newkey, newentry);
+            break;
+        }
+    }
+}
+#endif
+
 /* Must be with IOMMU lock held */
 static void vtd_update_iotlb(IntelIOMMUState *s, uint16_t source_id,
                              uint16_t domain_id, hwaddr addr, uint64_t slpte,
@@ -331,6 +359,9 @@ static void vtd_update_iotlb(IntelIOMMUState *s, uint16_t source_id,
     entry->slpte = slpte;
     entry->access_flags = access_flags;
     entry->mask = vtd_slpt_level_page_mask(level);
+    #ifdef HW_INV_MODE
+    entry->mapped = 1;
+    #endif
     *key = vtd_get_iotlb_key(gfn, source_id, level);
     g_hash_table_replace(s->iotlb, key, entry);
 }
@@ -1716,6 +1747,16 @@ static bool vtd_do_iommu_translate(VTDAddressSpace *vtd_as, PCIBus *bus,
         slpte = iotlb_entry->slpte;
         access_flags = iotlb_entry->access_flags;
         page_mask = iotlb_entry->mask;
+	#ifdef HW_INV_MODE
+        if (iotlb_entry->mapped==0){ 
+	    // IOTLB entry relates to an 
+	    // unmapped DMA buffer
+            qemu_log("Caught invalid access, iova: %lx, gpa: %lx\n",
+		     addr & page_mask, 
+		     vtd_get_slpte_addr(slpte, s->aw_bits) & page_mask);
+            goto error;
+        }
+        #endif
         goto out;
     }
 
@@ -2018,6 +2059,17 @@ static void vtd_iotlb_page_invalidate_notify(IntelIOMMUState *s,
         }
     }
 }
+
+#ifdef HW_INV_MODE
+static void vtd_iotlb_hw_inv(IntelIOMMUState *s, 
+                             hwaddr addr,
+                             uint16_t source_id)
+{
+    vtd_iommu_lock(s);
+    vtd_iotlb_reset_valid(s, addr, source_id);
+    vtd_iommu_unlock(s);
+}
+#endif
 
 static void vtd_iotlb_page_invalidate(IntelIOMMUState *s, uint16_t domain_id,
                                       hwaddr addr, uint8_t am)
@@ -2735,6 +2787,14 @@ static void vtd_mem_write(void *opaque, hwaddr addr,
     }
 
     switch (addr) {
+
+#ifdef HW_INV_MODE
+    case DMAR_HW_INV_REG:
+        vtd_set_long(s, addr, val);
+        vtd_iotlb_hw_inv(s, val & 0xffffffffU, (val>>32) & 0xffff);
+        break;
+#endif
+
     /* Global Command Register, 32-bit */
     case DMAR_GCMD_REG:
         vtd_set_long(s, addr, val);
@@ -3699,7 +3759,9 @@ static void vtd_init(IntelIOMMUState *s)
     vtd_define_long(s, DMAR_IEADDR_REG, 0, 0xfffffffcUL, 0);
     /* Treadted as RsvdZ when EIM in ECAP_REG is not supported */
     vtd_define_long(s, DMAR_IEUADDR_REG, 0, 0, 0);
-
+#ifdef HW_INV_MODE
+    vtd_define_long(s, DMAR_HW_INV_REG, 0, 0xffffffffUL, 0);
+#endif
     /* IOTLB registers */
     vtd_define_quad(s, DMAR_IOTLB_REG, 0, 0Xb003ffff00000000ULL, 0);
     vtd_define_quad(s, DMAR_IVA_REG, 0, 0xfffffffffffff07fULL, 0);

@@ -26,6 +26,8 @@
 #include "qemu/iova-tree.h"
 #include "qom/object.h"
 
+// #define HW_INV_MODE
+
 #define TYPE_INTEL_IOMMU_DEVICE "intel-iommu"
 OBJECT_DECLARE_SIMPLE_TYPE(IntelIOMMUState, INTEL_IOMMU_DEVICE)
 
@@ -42,7 +44,11 @@ OBJECT_DECLARE_SIMPLE_TYPE(IntelIOMMUState, INTEL_IOMMU_DEVICE)
 #define VTD_SID_TO_BUS(sid)         (((sid) >> 8) & 0xff)
 #define VTD_SID_TO_DEVFN(sid)       ((sid) & 0xff)
 
+#ifdef HW_INV_MODE
+#define DMAR_REG_SIZE               0xe50
+#else
 #define DMAR_REG_SIZE               0x230
+#endif
 #define VTD_HOST_AW_39BIT           39
 #define VTD_HOST_AW_48BIT           48
 #define VTD_HOST_ADDRESS_WIDTH      VTD_HOST_AW_39BIT
@@ -123,6 +129,9 @@ struct VTDIOTLBEntry {
     uint64_t slpte;
     uint64_t mask;
     uint8_t access_flags;
+#ifdef HW_INV_MODE
+    uint8_t mapped;
+#endif
 };
 
 /* VT-d Source-ID Qualifier types */
