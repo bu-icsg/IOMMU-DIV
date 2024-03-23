@@ -515,14 +515,20 @@ static int iova_reserve_iommu_regions(struct device *dev,
 	return ret;
 }
 
+#ifndef HW_INV_MODE_SWIOTLB // This function is unused in HW_INV_MODE
 static bool dev_is_untrusted(struct device *dev)
 {
 	return dev_is_pci(dev) && to_pci_dev(dev)->untrusted;
 }
+#endif
 
 static bool dev_use_swiotlb(struct device *dev)
 {
+	#ifdef HW_INV_MODE_SWIOTLB // Always enable swiotlb in HW_INV_MODE
+	return IS_ENABLED(CONFIG_SWIOTLB); 
+	#else
 	return IS_ENABLED(CONFIG_SWIOTLB) && dev_is_untrusted(dev);
+	#endif
 }
 
 /**
@@ -694,6 +700,14 @@ static void __iommu_dma_unmap(struct device *dev, dma_addr_t dma_addr,
 
 	if (!iotlb_gather.queued)
 		iommu_iotlb_sync(domain, &iotlb_gather);
+
+	#ifdef HW_INV_MODE
+	// call the function to send the unmap to the IOMMU
+	if (iotlb_gather.queued) {
+		iommu_iotlb_hw_inv_wrap(domain, dev, dma_addr);
+	}
+	#endif
+
 	iommu_dma_free_iova(cookie, dma_addr, size, &iotlb_gather);
 }
 

@@ -9,6 +9,8 @@
 
 #ifdef CONFIG_IOMMU_DMA
 
+// #define HW_INV_MODE
+
 int iommu_get_dma_cookie(struct iommu_domain *domain);
 void iommu_put_dma_cookie(struct iommu_domain *domain);
 

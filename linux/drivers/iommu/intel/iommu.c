@@ -4717,6 +4717,30 @@ static void intel_iommu_iotlb_sync_map(struct iommu_domain *domain,
 		__mapping_notify_one(info->iommu, dmar_domain, pfn, pages);
 }
 
+#ifdef HW_INV_MODE
+void intel_iommu_iotlb_hw_inv(struct device *dev, dma_addr_t iova){
+
+	struct intel_iommu *iommu;
+	u8 bus, devfn;
+	unsigned long flags;
+	unsigned long source_id;
+	unsigned long write_val;
+
+	iommu = device_to_iommu(dev, &bus, &devfn);
+	if (!iommu)
+		pr_err("Device to IOMMU failed\n");
+	source_id = ((bus<<8) | devfn);
+
+	write_val = (source_id<<32) | (iova & 0xffffffff);
+
+	raw_spin_lock_irqsave(&iommu->register_lock, flags);
+
+	writeq( write_val, iommu->reg + DMAR_HW_INV_REG);
+
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flags);
+}
+#endif
+
 static void intel_iommu_remove_dev_pasid(struct device *dev, ioasid_t pasid)
 {
 	struct intel_iommu *iommu = device_to_iommu(dev, NULL, NULL);
@@ -4766,6 +4790,9 @@ const struct iommu_ops intel_iommu_ops = {
 		.iova_to_phys		= intel_iommu_iova_to_phys,
 		.free			= intel_iommu_domain_free,
 		.enforce_cache_coherency = intel_iommu_enforce_cache_coherency,
+#ifdef HW_INV_MODE
+		.iommu_iotlb_hw_inv = intel_iommu_iotlb_hw_inv,
+#endif
 	}
 };
 

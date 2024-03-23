@@ -1647,8 +1647,12 @@ static int iommu_get_def_domain_type(struct device *dev)
 {
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
+#ifndef HW_INV_MODE 
+	// keep the deferred inv mode even when the dev 
+	// is untrusted when HW_INV is enabled
 	if (dev_is_pci(dev) && to_pci_dev(dev)->untrusted)
 		return IOMMU_DOMAIN_DMA;
+#endif
 
 	if (ops->def_domain_type)
 		return ops->def_domain_type(dev);

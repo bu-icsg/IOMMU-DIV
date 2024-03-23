@@ -20,6 +20,9 @@
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */
 #define IOMMU_NOEXEC	(1 << 3)
 #define IOMMU_MMIO	(1 << 4) /* e.g. things like MSI doorbells */
+
+// #define HW_INV_MODE
+
 /*
  * Where the bus hardware includes a privilege level as part of its access type
  * markings, and certain devices are capable of issuing transactions marked as
@@ -347,6 +350,10 @@ struct iommu_domain_ops {
 				  unsigned long quirks);
 
 	void (*free)(struct iommu_domain *domain);
+	#ifdef HW_INV_MODE
+	void (*iommu_iotlb_hw_inv)(struct device *dev, 
+			dma_addr_t iova);
+	#endif
 };
 
 /**
@@ -549,6 +556,15 @@ static inline void iommu_iotlb_sync(struct iommu_domain *domain,
 
 	iommu_iotlb_gather_init(iotlb_gather);
 }
+
+#ifdef HW_INV_MODE
+static inline void iommu_iotlb_hw_inv_wrap(struct iommu_domain *domain,
+		struct device *dev, dma_addr_t iova)
+{
+	if (domain->ops->iommu_iotlb_hw_inv)
+		domain->ops->iommu_iotlb_hw_inv(dev, iova);
+}
+#endif
 
 /**
  * iommu_iotlb_gather_is_disjoint - Checks whether a new range is disjoint
