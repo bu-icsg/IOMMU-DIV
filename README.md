@@ -67,5 +67,24 @@ We need to log out and log in again for this permission change to take effect. A
 export PATH=$PWD/build/bin:$PATH
 ./run.sh
 ```
+If everything goes well, this should bootup Linux on QEMU with the provided disk image.
+Use ```root``` as the login password.
+
+In the proof-of-concept exploit, we fill the storage device with a known value and try to leak these values using the malicious NIC through DIV (refer to the paper for more details).
+If you booted Linux with the disk image we provided, you should see a large file with the same sequence of bytes (0xcafebaba). 
+If you used your own disk image, you will have to create such a file by yourself for the exploit. 
+Malicious behavior is enabled by default in this repo, so we just need to trigger simultaneous DMA traffic for both storage and NIC devices. 
+For that, execute the following command in the Linux terminal in the QEMU. 
+```
+netperf -H 128.197.176.190 -l 30 -t TCP_STREAM -I 99,5 -c & fio --name=random-read --filename=/dev/sda --ioengine=posixaio --rw=randread --bs=4k --numjobs=1 --size=1g --iodepth=1 --runtime=200 --time_based --end_fsync=1 &
+```
+These commands run netperf and fio for initiating network and storage DMA operations respectively. 
+Once the commands are done executing, check the QEMU trace log (specified in run.sh) for the storage data. 
+
+**Note:** Storage data bytes are rearranged when reading from DMA so we need to look for 0xfecababa instead of 0xcafebaba.
+```
+grep "Read success" qemu_trace.exploit.log | grep fecababa
+```
+If the exploit worked, you should see a few malicious reads with leaked storage data. 
 
 ## Enabling the Mitigation
