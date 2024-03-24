@@ -88,3 +88,21 @@ grep "Read success" qemu_trace.exploit.log | grep fecababa
 If the exploit worked, you should see a few malicious reads with leaked storage data. 
 
 ## Enabling the Mitigation
+Mitigation should be enabled in both software (Linux kernel) and hardware (QEMU).
+
+For enabling the mitigation in Linux kernel, uncomment the ```#define HW_INV_MODE``` line at the beginning of following files:
+```
+linux/drivers/iommu/dma-iommu.h
+linux/drivers/iommu/intel/iommu.h
+linux/include/linux/iommu.h
+```
+
+For enabling the mitigation in QEMU, uncomment the ```#define HW_INV_MODE``` line at the beginning of following file:
+```
+qemu/include/hw/i386/intel_iommu.h
+```
+After enabling the mitigation recompile both QEMU and Linux kernel for the changes to take effect.
+Execute the run.sh script again to run the exploit with the mitigation enabled.
+```
+./run.sh
+```
