@@ -1,6 +1,6 @@
 # IOMMU Deferred Invalidation Vulnerability: Exploit and Defense
 These are the artifacts for our paper on IOMMU deferred invalidation vulnerability that will be presented at the Design, Automation and Test in Europe (DATE) 2024 conference. 
-In this work, we present a proof-of-concept exploit for deferred invalidation vulnerability on a QEMU-emulated system, which demonstrates that a malicious device (NIC) can leak the data of other devices (SATA storage device in our exploit) connected to the system. 
+In this work, we present a proof-of-concept exploit for deferred invalidation vulnerability on a QEMU-emulated system, which demonstrates that a malicious device (e.g.- a NIC) can leak the data of other devices (SATA storage device in our exploit) connected to the system. 
 We also propose hardware-assisted mitigation for this vulnerability, which involves minor changes to the existing IOMMU hardware and driver. 
 Please refer to the paper for more details on the exploit and mitigation. 
 The following sections will provide details on how to run the exploit using QEMU, with and without the mitigation enabled.
